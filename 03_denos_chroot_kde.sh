@@ -1,12 +1,4 @@
-# DenOS - Debian Linux build from scratch with Debootstrap#
-# Bernardino Lopez [ bernardino.lopez@gmail.com ]
-# 11.27.18
 
-# 03_denos_chroot.sh - Customize your Distro
-# As root in chroot. Execute the script in a Terminal 
-# ./03_denos_chroot_lxde.sh
-
-# export LIVE_BOOT=LIVE_BOOT64
 source ./denos_config.txt
 
 # Set Hostname
@@ -36,12 +28,100 @@ apt-get clean
 echo -e "127.0.0.1\tlocalhost" > /etc/hosts
 echo -e "127.0.0.1\t$DISTRO_HOSTNAME" >> /etc/hosts
 
-# Create live user for the installer
-useradd -m live -s /bin/bash
-echo 'live:live' | chpasswd
+# Instead of creating a live user, we'll set up root
+echo 'root:root' | chpasswd  # Set a simple root password for live system
 
-# Don't set root password for live system
-# passwd root  # commenting this out for live system
+# Configure polkit to allow root to do everything without password
+mkdir -p /etc/polkit-1/rules.d
+cat > /etc/polkit-1/rules.d/49-nopasswd_global.rules << EOF
+polkit.addRule(function(action, subject) {
+    if (subject.user == "root") {
+        return polkit.Result.YES;
+    }
+});
+EOF
+
+# Also disable root password prompt in sudo
+echo "root ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/root-nopasswd
+
+# Make KDE not ask for passwords
+mkdir -p /etc/kde/
+cat > /etc/kde/kdmrc << EOF
+[General]
+AllowRootLogin=true
+EOF
+
+# Disable KDE Wallet
+mkdir -p /root/.config/
+cat > /root/.config/kwalletrc << EOF
+[Wallet]
+Enabled=false
+First Use=false
+EOF
+
+# Disable password prompt for package management
+cat > /etc/apt/apt.conf.d/01-nopasswd << EOF
+APT::Get::AllowUnauthenticated "true";
+Acquire::AllowInsecureRepositories "true";
+Acquire::AllowDowngradeToInsecureRepositories "true";
+EOF
+
+# Configure SDDM for automatic root login
+cat > /etc/sddm.conf << EOF
+[Theme]
+Current=debian-breeze
+
+[Users]
+RememberLastUser=true
+RememberLastSession=true
+HideUsers=false
+AllowRootLogin=true
+MinimumUid=0
+
+[General]
+InputMethod=
+Numlock=on
+HaltCommand=/sbin/poweroff
+RebootCommand=/sbin/reboot
+
+[Autologin]
+Relogin=true
+Session=plasma
+User=root
+EOF
+
+# Create autostart for root
+mkdir -p /root/.config/autostart
+cat > /root/.config/autostart/calamares.desktop << EOF
+[Desktop Entry]
+Type=Application
+Name=Install FonderOS
+Exec=calamares
+Hidden=false
+X-GNOME-Autostart-enabled=true
+EOF
+
+chmod +x /root/.config/autostart/calamares.desktop
+
+# Create desktop shortcut for root
+mkdir -p /root/Desktop
+cat > /root/Desktop/install-fonder.desktop << EOF
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Install FonderOS
+GenericName=System Installer
+Keywords=calamares;system;installer;
+TryExec=calamares
+Exec=calamares
+Comment=Install FonderOS on your system
+Icon=calamares
+Terminal=false
+StartupNotify=true
+Categories=Qt;System;
+EOF
+
+chmod +x /root/Desktop/install-fonder.desktop
 
 # Set up Plymouth boot splash
 mkdir -p /usr/share/plymouth/themes/custom-splash
@@ -70,8 +150,8 @@ plymouth-set-default-theme custom-splash
 update-initramfs -u
 
 # Set up custom neofetch configuration
-mkdir -p /etc/skel/.config/neofetch
-cat > /etc/skel/.config/neofetch/config.conf << 'EOF'
+mkdir -p /root/.config/neofetch
+cat > /root/.config/neofetch/config.conf << 'EOF'
 print_info() {
     info title
     info "OS" distro
@@ -98,19 +178,18 @@ image_source="$(figlet FonderOS)"
 distro="FonderOS 0.0.2"
 EOF
 
-# Also set it for root user and live user
-mkdir -p /root/.config/neofetch
-cp /etc/skel/.config/neofetch/config.conf /root/.config/neofetch/
-mkdir -p /home/live/.config/neofetch
-cp /etc/skel/.config/neofetch/config.conf /home/live/.config/neofetch/
-chown -R live:live /home/live/.config
-
-# Create a custom ASCII art file for the logo
+# Create FIGLET art for neofetch
 figlet "FonderOS" > /etc/neofetch-logo
 
-# Configure automatic installer launch for live session
-mkdir -p /etc/skel/.config/autostart
-cat > /etc/skel/.config/autostart/calamares.desktop << EOF
+# Make neofetch load on root's terminal
+echo "neofetch" >> /root/.bashrc
+
+# Remove unnecessary /etc/skel configuration
+rm -rf /etc/skel/.config/neofetch
+
+# Configure automatic installer launch for root session
+mkdir -p /root/.config/autostart
+cat > /root/.config/autostart/calamares.desktop << EOF
 [Desktop Entry]
 Type=Application
 Version=1.0
@@ -118,7 +197,7 @@ Name=Install FonderOS
 GenericName=System Installer
 Keywords=calamares;system;installer;
 TryExec=calamares
-Exec=pkexec calamares
+Exec=calamares
 Comment=Install FonderOS on your system
 Icon=calamares
 Terminal=false
@@ -126,48 +205,29 @@ StartupNotify=true
 Categories=Qt;System;
 EOF
 
-# Configure SDDM for automatic login in live session
-cat > /etc/sddm.conf << EOF
-[Theme]
-Current=debian-breeze
+chmod +x /root/.config/autostart/calamares.desktop
 
-[Users]
-RememberLastUser=true
-RememberLastSession=true
-
-[General]
-InputMethod=
-Numlock=on
-
-[Autologin]
-Relogin=false
-Session=plasma
-User=live
-EOF
-
-# Create a live-session specific script
-cat > /usr/local/bin/live-session-setup << EOF
-#!/bin/bash
-if [ ! -f /etc/live-session-setup-done ]; then
-    # Start Calamares installer
-    pkexec calamares &
-    touch /etc/live-session-setup-done
-fi
-EOF
-
-chmod +x /usr/local/bin/live-session-setup
-
-# Add the script to autostart
-cat > /etc/skel/.config/autostart/live-setup.desktop << EOF
+# Create desktop shortcut for root
+mkdir -p /root/Desktop
+cat > /root/Desktop/install-fonder.desktop << EOF
 [Desktop Entry]
 Type=Application
-Name=Live Session Setup
-Exec=/usr/local/bin/live-session-setup
-Hidden=false
-X-GNOME-Autostart-enabled=true
+Version=1.0
+Name=Install FonderOS
+GenericName=System Installer
+Keywords=calamares;system;installer;
+TryExec=calamares
+Exec=calamares
+Comment=Install FonderOS on your system
+Icon=calamares
+Terminal=false
+StartupNotify=true
+Categories=Qt;System;
 EOF
 
-# Configure Calamares installer with custom branding
+chmod +x /root/Desktop/install-fonder.desktop
+
+# Set up Calamares installer with custom branding
 mkdir -p /etc/calamares/modules
 mkdir -p /etc/calamares/branding/fonderos
 
@@ -319,3 +379,4 @@ chmod +x /home/live/.config/autostart/calamares.desktop
 chown -R live:live /home/live/.config
 
 exit
+
