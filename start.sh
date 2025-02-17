@@ -8,7 +8,6 @@
 # chmod 755 denos_get_started.sh
 # ./denos_get_started.sh
 
-wget https://github.com/Parkourer10/extras/raw/master/Denos_HowTo.txt
 wget https://github.com/Parkourer10/extras/raw/master/01_denos_pre_reqs.sh
 wget https://github.com/Parkourer10/extras/raw/master/02_denos_debootstrap.sh
 
