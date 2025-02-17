@@ -1,4 +1,3 @@
-
 source ./denos_config.txt
 
 # Set Hostname
@@ -247,9 +246,10 @@ strings:
     versionedName:      FonderOS 0.0.2
     shortVersionedName: FonderOS 0.0.2
     bootloaderEntryName: FonderOS
-    productUrl:         https://github.com/Parkourer10
-    supportUrl:         https://github.com/Parkourer10
-    releaseNotesUrl:    https://github.com/Parkourer10
+    productUrl:         https://github.com/Parkourer10/
+    supportUrl:         https://github.com/Parkourer10/
+    releaseNotesUrl:    https://github.com/Parkourer10/
+    welcomeMessage:     "Welcome to the FonderOS Installer"
 
 images:
     productLogo:         "logo.png"
@@ -362,7 +362,6 @@ EOF
 
 chmod +x /etc/skel/Desktop/install-fonder.desktop
 cp /etc/skel/Desktop/install-fonder.desktop /home/live/Desktop/
-chown -R live:live /home/live/Desktop
 
 # Set up autostart for Calamares
 mkdir -p /home/live/.config/autostart
@@ -376,7 +375,5 @@ X-GNOME-Autostart-enabled=true
 EOF
 
 chmod +x /home/live/.config/autostart/calamares.desktop
-chown -R live:live /home/live/.config
 
 exit
-
