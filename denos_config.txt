@@ -1,0 +1,3 @@
+LIVE_BOOT=fonderos
+DISTRO_NAME=FonderOS
+VERSION=0.0.2
