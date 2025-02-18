@@ -12,17 +12,17 @@ apt-get install -y --no-install-recommends \
     systemd-sysv \
     plymouth \
     plymouth-themes \
-    figlet neofetch
-
-apt-get install -y --no-install-recommends \
+    figlet neofetch \
     network-manager net-tools wireless-tools wpagui \
     curl openssh-server openssh-client \
     blackbox xserver-xorg-core xserver-xorg xinit xterm \
     screenfetch screen vim iputils-ping \
-    psmisc htop nmap firefox-esr wget git ca-certificates \
+    psmisc htop squashfs-tools rsync btop nmap firefox-esr git \
     nano fdisk kde-full sddm sddm-theme-debian-breeze \
     calamares calamares-settings-debian && \
 apt-get clean
+
+systemctl enable --now rsync
 
 echo -e "127.0.0.1\tlocalhost" > /etc/hosts
 echo -e "127.0.0.1\t$DISTRO_HOSTNAME" >> /etc/hosts
@@ -89,7 +89,7 @@ Session=plasma
 User=root
 EOF
 
-# Create autostart for root
+# Keep only one autostart entry for root (early in the file)
 mkdir -p /root/.config/autostart
 cat > /root/.config/autostart/calamares.desktop << EOF
 [Desktop Entry]
@@ -98,11 +98,21 @@ Name=Install FonderOS
 Exec=calamares
 Hidden=false
 X-GNOME-Autostart-enabled=true
+Terminal=false
+StartupNotify=true
+X-KDE-autostart-after=plasma-desktop
+X-KDE-autostart-phase=2
+NoDisplay=false
+OnlyShowIn=KDE;
 EOF
 
 chmod +x /root/.config/autostart/calamares.desktop
 
-# Create desktop shortcut for root
+# Also add to plasma autostart for redundancy
+mkdir -p /root/.config/plasma-workspace/autostart/
+cp /root/.config/autostart/calamares.desktop /root/.config/plasma-workspace/autostart/
+
+# Keep only one desktop shortcut for root
 mkdir -p /root/Desktop
 cat > /root/Desktop/install-fonder.desktop << EOF
 [Desktop Entry]
@@ -185,46 +195,6 @@ echo "neofetch" >> /root/.bashrc
 
 # Remove unnecessary /etc/skel configuration
 rm -rf /etc/skel/.config/neofetch
-
-# Configure automatic installer launch for root session
-mkdir -p /root/.config/autostart
-cat > /root/.config/autostart/calamares.desktop << EOF
-[Desktop Entry]
-Type=Application
-Version=1.0
-Name=Install FonderOS
-GenericName=System Installer
-Keywords=calamares;system;installer;
-TryExec=calamares
-Exec=calamares
-Comment=Install FonderOS on your system
-Icon=calamares
-Terminal=false
-StartupNotify=true
-Categories=Qt;System;
-EOF
-
-chmod +x /root/.config/autostart/calamares.desktop
-
-# Create desktop shortcut for root
-mkdir -p /root/Desktop
-cat > /root/Desktop/install-fonder.desktop << EOF
-[Desktop Entry]
-Type=Application
-Version=1.0
-Name=Install FonderOS
-GenericName=System Installer
-Keywords=calamares;system;installer;
-TryExec=calamares
-Exec=calamares
-Comment=Install FonderOS on your system
-Icon=calamares
-Terminal=false
-StartupNotify=true
-Categories=Qt;System;
-EOF
-
-chmod +x /root/Desktop/install-fonder.desktop
 
 # Set up Calamares installer with custom branding
 mkdir -p /etc/calamares/modules
@@ -328,52 +298,70 @@ sequence:
   - grubcfg
   - bootloader
   - packages
+  - removeuser
   - umount
+- show:
+  - finished
 
 branding: fonderos
 prompt-install: true
-
 dont-chroot: false
-
 oem-setup: false
-
 disable-cancel: false
-
 disable-cancel-during-exec: false
 EOF
 
-# Create desktop shortcut for installer
-mkdir -p /etc/skel/Desktop /home/live/Desktop
-cat > /etc/skel/Desktop/install-fonder.desktop << EOF
-[Desktop Entry]
-Type=Application
-Version=1.0
-Name=Install FonderOS
-GenericName=System Installer
-Keywords=calamares;system;installer;
-TryExec=calamares
-Exec=pkexec calamares
-Comment=Install FonderOS on your system
-Icon=calamares
-Terminal=false
-StartupNotify=true
-Categories=Qt;System;
+# Configure unpackfs
+cat > /etc/calamares/modules/unpackfs.conf << EOF
+---
+unpack:
+    -   source: "/run/live/medium/live/filesystem.squashfs"
+        sourcefs: "squashfs"
+        destination: ""
 EOF
 
-chmod +x /etc/skel/Desktop/install-fonder.desktop
-cp /etc/skel/Desktop/install-fonder.desktop /home/live/Desktop/
-
-# Set up autostart for Calamares
-mkdir -p /home/live/.config/autostart
-cat > /home/live/.config/autostart/calamares.desktop << EOF
-[Desktop Entry]
-Type=Application
-Name=Install FonderOS
-Exec=pkexec calamares
-Hidden=false
-X-GNOME-Autostart-enabled=true
+# Configure finished module for restart functionality
+mkdir -p /etc/calamares/modules
+cat > /etc/calamares/modules/finished.conf << EOF
+---
+restartNowEnabled: true
+restartNowChecked: true
+restartNowCommand: "systemctl reboot"
 EOF
 
-chmod +x /home/live/.config/autostart/calamares.desktop
+# Configure removeuser module
+cat > /etc/calamares/modules/removeuser.conf << EOF
+---
+username: root
+EOF
+
+# Configure packages module to remove installer
+cat > /etc/calamares/modules/packages.conf << EOF
+---
+backend: apt
+
+operations:
+  - remove:
+      - calamares
+      - calamares-settings-debian
+      - live-boot
+      - live-config
+      - live-config-systemd
+EOF
+
+# Configure displaymanager module
+cat > /etc/calamares/modules/displaymanager.conf << EOF
+---
+displaymanagers:
+  - sddm
+
+basicSetup: true
+
+defaultDesktopEnvironment:
+    executable: "startplasma-x11"
+    desktopFile: "plasma"
+
+sysconfigSetup: false
+EOF
 
 exit
